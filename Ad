@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Auto-Clicker (Active Tab Required)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .input-group {
+            margin: 15px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        #startBtn {
+            background: #4CAF50;
+            color: white;
+        }
+        #startBtn:hover {
+            background: #45a049;
+        }
+        #stopBtn {
+            background: #f44336;
+            color: white;
+        }
+        #stopBtn:hover {
+            background: #d32f2f;
+        }
+        #stopBtn:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 15px;
+            background: #e8f5e8;
+            border-radius: 5px;
+            margin: 20px 0;
+            text-align: center;
+            font-weight: bold;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2196F3;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+        .log {
+            height: 200px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Auto-Clicker (Web Version)</h1>
+        <p style="text-align: center; color: #666;">Note: Must keep tab open and active</p>
+        
+        <div class="input-group">
+            <label for="urlInput">Target URL:</label>
+            <input type="text" id="urlInput" placeholder="https://otieu.com/4/10347116" value="https://example.com">
+        </div>
+        
+        <div class="input-group">
+            <label for="delayInput">Click Interval (seconds):</label>
+            <input type="number" id="delayInput" value="10" min="5" max="300">
+        </div>
+        
+        <div class="input-group">
+            <label for="maxClicks">Maximum Clicks (0 = unlimited):</label>
+            <input type="number" id="maxClicks" value="0" min="0">
+        </div>
+        
+        <div class="button-group">
+            <button id="startBtn">Start Auto-Click</button>
+            <button id="stopBtn" disabled>Stop</button>
+        </div>
+        
+        <div class="status" id="status">
+            Status: Ready
+        </div>
+        
+        <div class="stats">
+            <div class="stat-box">
+                <div class="stat-value" id="clickCount">0</div>
+                <div>Total Clicks</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="timeElapsed">00:00:00</div>
+                <div>Time Running</div>
+            </div>
+        </div>
+        
+        <div class="log" id="logContainer">
+            <!-- Log entries will appear here -->
+        </div>
+        
+        <div class="warning">
+            <strong>⚠️ Important Limitations:</strong><br>
+            1. This must run in an open browser tab<br>
+            2. Tab must remain active (not minimized)<br>
+            3. Cannot run when browser/phone is locked<br>
+            4. For true background operation, a desktop app is required
+        </div>
+    </div>
+
+    <script>
+        // Enhanced auto-clicker with better logging and controls
+        let isRunning = false;
+        let timer = null;
+        let clickCount = 0;
+        let startTime = null;
+        let timeInterval = null;
+        let currentWindow = null;
+
+        // DOM elements
+        const urlInput = document.getElementById('urlInput');
+        const delayInput = document.getElementById('delayInput');
+        const maxClicksInput = document.getElementById('maxClicks');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const status = document.getElementById('status');
+        const clickCountDisplay = document.getElementById('clickCount');
+        const timeElapsedDisplay = document.getElementById('timeElapsed');
+        const logContainer = document.getElementById('logContainer');
+
+        // Add log entry
+        function addLog(message, type = 'info') {
+            const now = new Date();
+            const timestamp = now.toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
+            
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+            
+            // Keep only last 50 entries
+            const entries = logContainer.querySelectorAll('.log-entry');
+            if (entries.length > 50) {
+                entries[0].remove();
+            }
+        }
+
+        // Format time
+        function formatTime(seconds) {
+            const hrs = Math.floor(seconds / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // Update elapsed time
+        function updateElapsedTime() {
+            if (!startTime) return;
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            timeElapsedDisplay.textContent = formatTime(elapsed);
+        }
+
+        // Perform click
+        async function performClick() {
+            if (!isRunning) return;
+            
+            const url = urlInput.value.trim();
+            if (!url) {
+                addLog('Error: No URL specified', 'error');
+                stopAutoClick();
+                return;
+            }
+
+            try {
+                // Try to open in a new tab/window
+                if (!currentWindow || currentWindow.closed) {
+                    currentWindow = window.open(url, '_blank', 'width=800,height=600');
+                    addLog(`Opened new tab: ${url}`);
+                } else {
+                    // Focus existing window and change URL
+                    currentWindow.focus();
+                    currentWindow.location.href = url;
+                    addLog(`Changed URL in existing tab: ${url}`);
+                }
+                
+                // Close the tab after a short delay (optional)
+                setTimeout(() => {
+                    if (currentWindow && !currentWindow.closed) {
+                        currentWindow.close();
+                        addLog('Closed tab');
+                    }
+                }, 1000);
+                
+                clickCount++;
+                clickCountDisplay.textContent = clickCount;
+                
+                addLog(`Click #${clickCount} completed`);
+                
+                // Check max clicks
+                const maxClicks = parseInt(maxClicksInput.value);
+                if (maxClicks > 0 && clickCount >= maxClicks) {
+                    addLog(`Maximum clicks (${maxClicks}) reached`, 'warning');
+                    stopAutoClick();
+                    return;
+                }
+                
+                // Schedule next click
+                const delay = parseInt(delayInput.value) * 1000;
+                timer = setTimeout(performClick, delay);
+                
+            } catch (error) {
+                addLog(`Error: ${error.message}`, 'error');
+                stopAutoClick();
+            }
+        }
+
+        // Start auto-click
+        function startAutoClick() {
+            if (isRunning) return;
+            
+            const url = urlInput.value.trim();
+            if (!url) {
+                alert('Please enter a valid URL');
+                return;
+            }
+            
+            const delay = parseInt(delayInput.value);
+            if (delay < 5) {
+                alert('Delay must be at least 5 seconds');
+                return;
+            }
+            
+            isRunning = true;
+            startTime = Date.now();
+            clickCount = 0;
+            
+            status.textContent = `Running - Next click in ${delay}s`;
+            status.style.backgroundColor = '#d4edda';
+            status.style.color = '#155724';
+            
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            
+            // Start time update interval
+            timeInterval = setInterval(updateElapsedTime, 1000);
+            
+            addLog(`Started auto-clicker. URL: ${url}, Interval: ${delay}s`);
+            
+            // Start clicking
+            performClick();
+        }
+
+        // Stop auto-click
+        function stopAutoClick() {
+            if (!isRunning) return;
+            
+            isRunning = false;
+            clearTimeout(timer);
+            clearInterval(timeInterval);
+            
+            status.textContent = 'Stopped';
+            status.style.backgroundColor = '#f8d7da';
+            status.style.color = '#721c24';
+            
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            
+            addLog('Auto-clicker stopped');
+            
+            // Close any open window
+            if (currentWindow && !currentWindow.closed) {
+                currentWindow.close();
+            }
+        }
+
+        // Initialize
+        function init() {
+            addLog('Auto-clicker initialized');
+            addLog('Note: Tab must remain open and active', 'warning');
+            
+            // Event listeners
+            startBtn.addEventListener('click', startAutoClick);
+            stopBtn.addEventListener('click', stopAutoClick);
+            
+            // Clear inputs on page load for safety
+            urlInput.value = 'https://example.com';
+            
+            // Add some sample URLs for testing
+            addLog('Try these test URLs:', 'info');
+            addLog('- https://httpbin.org/delay/2');
+            addLog('- https://httpstat.us/200');
+            addLog('- https://example.com');
+        }
+
+        // Start when page loads
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
